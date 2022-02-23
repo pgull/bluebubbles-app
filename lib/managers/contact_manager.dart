@@ -10,6 +10,7 @@ import 'package:bluebubbles/repository/models/models.dart';
 import 'package:bluebubbles/socket_manager.dart';
 import 'package:faker/faker.dart';
 import 'package:fast_contacts/fast_contacts.dart' hide Contact;
+import 'package:contacts_service/contacts_service.dart' as cs;
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -27,7 +28,7 @@ class ContactManager {
 
   List<Contact> contacts = [];
   bool hasFetchedContacts = false;
-  Map<String, Contact?> handleToContact = {};
+  Map<String, Contact> handleToContact = {};
   Map<String, String?> handleToFakeName = {};
   Map<String, String?> handleToFakeAddress = {};
   Map<String, String> handleToFormattedAddress = {};
@@ -43,6 +44,76 @@ class ContactManager {
     } else {
       return handleToContact[address];
     }
+  }
+
+  /// Fetches contacts for a given chat
+  ///
+  /// You must pass either a [guid] or [chat] so we can get the participants.
+  /// If [force] is true, we will always fetch a new Contact object from the ContactsService
+  Future<List<Contact>> getContactsForChat({ String? guid, Chat? chat, force = false }) async {
+    if (chat == null && guid == null) {
+      throw Exception("Please provide either a `guid` or `chat` to fetch a chat's contacts");
+    }
+
+    // If we don't have a chat, find it by the passed GUID
+    chat ??= Chat.findOne(guid: guid);
+    if (chat == null) throw Exception("Failed to find chat with GUID: $guid");
+
+    // If we don't have any participants, load them
+    if (chat.participants.isEmpty) {
+      chat.getParticipants();
+    }
+
+    // For each participant, get the respective contact matches.
+    // Add matches to a list to return, as well as the global cache
+    List<Contact> chatContacts = [];
+    for (Handle handle in chat.participants) {
+      List<Contact> matches = await getContactsForAddress(handle.address, force: force);
+      chatContacts.addAll(matches);
+      if (matches.isNotEmpty) {
+        handleToContact[handle.address] = matches[0];
+      }
+    }
+
+    return chatContacts;
+  }
+
+  /// Fetchs contacts for a given address.
+  ///
+  /// If [force] is true, we will always fetch a new Contact object from the ContactsService
+  Future<List<Contact>> getContactsForAddress(String address, {force = false}) async {
+    List<Contact> chatContacts = [];
+    List<cs.Contact> contactMatches = [];
+
+    // If we already have a contact for the address (and not forcing a refresh), then use that.
+    // Otherwise, fetch the contact based on email/phone
+    if (handleToContact.containsKey(address) && !force) {
+      chatContacts.add(handleToContact[address]!);
+    } else if (address.contains('@')) {
+      contactMatches = await cs.ContactsService.getContactsForEmail(address);
+    } else {
+      contactMatches = await cs.ContactsService.getContactsForPhone(address);
+    }
+
+    // This will only get called if our handleToContact map doesn't already include the contact
+    for (cs.Contact match in contactMatches) {
+      if (match.identifier == null) continue;
+
+      // Remove empty items
+      match.emails?.removeWhere((element) => element.value == null);
+      match.phones?.removeWhere((element) => element.value == null);
+
+      // Create a new contact to add to the list
+      chatContacts.add(Contact(
+        id: match.identifier!,
+        displayName: match.displayName ?? "${match.givenName ?? ''} ${match.familyName ?? ''}".trim(),
+        emails: match.emails?.map((e) => e.value!).toList() ?? [],
+        phones: match.phones?.map((e) => e.value!).toList() ?? [],
+        avatarBytes: match.avatar
+      ));
+    }
+
+    return chatContacts;
   }
 
   Future<bool> canAccessContacts() async {
@@ -179,6 +250,10 @@ class ContactManager {
   }
 
   Future<void> matchHandles() async {
+    print("(TEST CONTACTS) Starting matchHandles...");
+    Stopwatch watch = Stopwatch();
+    watch.start();
+
     // Match handles to contacts
     List<Handle> handles = kIsWeb ? ChatBloc().cachedHandles : Handle.find();
     for (Handle handle in handles) {
@@ -192,7 +267,10 @@ class ContactManager {
 
       try {
         contactMatch = getContact(handle);
-        handleToContact[handle.address] = contactMatch;
+        if (contactMatch != null) {
+          handleToContact[handle.address] = contactMatch;
+        }
+
         if (!handle.address.isEmail && contactMatch == null) {
           handleToFormattedAddress[handle.address] = await formatPhoneNumber(handle.address);
         }
@@ -206,11 +284,12 @@ class ContactManager {
             ? MapEntry(entry.key, faker.person.name())
             : MapEntry(entry.key, handleToFakeName[entry.key])));
 
-    handleToFakeAddress = handleToFakeName.map((key, value) => MapEntry(
-        key,
-        key.isEmail
-            ? faker.internet.email()
-            : faker.phoneNumber.random.fromPattern(["+###########", "+# ###-###-####", "+# (###) ###-####"])));
+    handleToFakeAddress = handleToFakeName
+        .map((key, value) => MapEntry(key, key.isEmail ? faker.internet.email() : faker.phoneNumber.random.fromPattern(["+###########", "+# ###-###-####", "+# (###) ###-####"])));
+
+    watch.stop();
+    print("(TEST CONTACTS) Finished matchHandles...");
+    print("(TEST CONTACTS) matchHandles took ${watch.elapsedMilliseconds} ms");
   }
 
   Future<void> getAvatars() async {
