@@ -39,6 +39,8 @@ class ContactManager {
   /// Maps addresses to formatted versions
   final Map<String, String> _addressToFormatted = {};
 
+  /// Lets everyone know that we've tried to build the contacts cache map fully, at least once
+  bool hasBuiltCache = false;
 
   // We need these so we don't have threads fetching at the same time
   Completer<bool>? getContactsFuture;
@@ -116,7 +118,24 @@ class ContactManager {
     }
   }
 
-  Future<bool> loadContacts({headless = false, force = false, loadAvatars = false}) async {
+  Future<void> _loadContacts() async {
+    Logger.info("Fetching contacts", tag: tag);
+    if (!kIsWeb && !kIsDesktop) {
+      contacts = (await FastContacts.allContacts)
+          .map((e) => Contact(
+                displayName: e.displayName,
+                emails: e.emails,
+                phones: e.phones,
+                structuredName: e.structuredName,
+                id: e.id,
+              ))
+          .toList();
+    } else {
+      await fetchContactsDesktop();
+    }
+  }
+
+  Future<bool> loadContacts({headless = false, force = false, loadAvatars = false, buildCache = true, Chat? chat}) async {
     // If we are fetching the contacts, return the current future so we can await it
     if (getContactsFuture != null && !getContactsFuture!.isCompleted) {
       Logger.info("Already fetching contacts, returning future...", tag: tag);
@@ -141,22 +160,15 @@ class ContactManager {
     getContactsFuture = Completer<bool>();
 
     // Fetch the current list of contacts
-    Logger.info("Fetching contacts", tag: tag);
-    if (!kIsWeb && !kIsDesktop) {
-      contacts = (await FastContacts.allContacts)
-          .map((e) => Contact(
-                displayName: e.displayName,
-                emails: e.emails,
-                phones: e.phones,
-                structuredName: e.structuredName,
-                id: e.id,
-              ))
-          .toList();
-    } else {
-      await fetchContactsDesktop();
-    }
+    _loadContacts();
 
-    await buildCacheMap();
+    if (buildCache) {
+      if (chat != null) {
+        await buildCacheMapForChat(chat);
+      } else {
+        await buildCacheMap();
+      }
+    }
     
     if (SettingsManager().settings.redactedMode.value && SettingsManager().settings.generateFakeContactNames.value) {
       loadFakeInfo();
@@ -171,14 +183,18 @@ class ContactManager {
 
     // Lazy load thumbnails after rendering initial contacts.
     if (loadAvatars) {
-      getAvatars();
+      if (chat != null) {
+        getAvatarsForChat(chat);
+      } else {
+        getAvatars();
+      }
     }
 
     return getContactsFuture!.future;
   }
 
-  Future<void> buildCacheMap({loadFormatted = true}) async {
-    for (Contact c in contacts) {
+  Future<void> buildCacheMap({loadFormatted = true, List<Contact>? contactsOverride}) async {
+    for (Contact c in contactsOverride ?? contacts) {
       for (String p in c.phones) {
         String saniPhone = p.numericOnly();
         _phoneToContactMap[saniPhone] = c;
@@ -189,6 +205,26 @@ class ContactManager {
         _emailToContactMap[e] = c;
       }
     }
+
+    if (contactsOverride == null) {
+      hasBuiltCache = true;
+    }
+  }
+
+  Future<void> buildCacheMapForChat(Chat chat, {loadFormatted = true}) async {
+    if (chat.participants.isEmpty) {
+      chat.getParticipants();
+    }
+
+    List<Contact> chatContacts = [];
+    for (Handle h in chat.participants) {
+      Contact? contact = getContact(h.address);
+      if (contact != null) {
+        chatContacts.add(contact);
+      }
+    }
+
+    await buildCacheMap(loadFormatted: loadFormatted, contactsOverride: chatContacts);
   }
 
   Future<void> fetchContactsDesktop({Function(String)? logger}) async {

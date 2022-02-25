@@ -83,6 +83,56 @@ class MethodChannelInterface {
     return platform.invokeMethod(method, arguments);
   }
 
+  // Future<void> loadChatContacts({ Map<String, dynamic>? data, Chat? chat }) async {
+  //   if (ContactManager().hasBuiltCache) return;
+  //   if (data == null && chat == null) return;
+
+  //   List<Chat>? chatsToLoad = [];
+  //   if (chat != null) {
+  //     chatsToLoad.add(chat);
+  //   }
+
+  //   // Parse the chat from the arguments
+  //   if (chat == null && data != null) {
+  //     Chat? theChat;
+
+  //     // If we have a data payload, make it the "top level"
+  //     if (data['data'] != null && data['data'] is Map<String, dynamic>) {
+  //       data = data['data'] as Map<String, dynamic>;
+  //     }
+
+  //     if (data['guid'] != null) {
+  //       theChat = Chat.findOne(guid: data['guid']);
+  //     } else if (data['chat'] != null && data['chat'] is String) {
+  //       theChat = Chat.findOne(guid: data['chat']);
+  //     } else if (data['chatGuid'] != null) {
+  //       theChat = Chat.findOne(guid: data['chatGuid']);
+  //     } else if (data['chat'] != null && data['chat'] is Map<String, dynamic> && data['chat']['guid'] != null) {
+  //       theChat = Chat.findOne(guid: data['chat']['guid']);
+  //     } else if (data['chats'] != null && data['chats'] is List<Map<String, dynamic>>) {
+  //       for (var i in data['chats']) {
+  //         if (data['guid'] == null) continue;
+
+  //         try {
+  //           Chat aChat = Chat.fromMap(i);
+  //           chatsToLoad.add(aChat);
+  //         } catch (_) {
+  //           // Pass, don't do anything
+  //         }
+          
+  //       }
+  //     }
+
+  //     if (theChat != null) {
+  //       chatsToLoad.add(theChat);
+  //     }
+  //   }
+
+  //   for (Chat c in chatsToLoad) {
+  //     await ContactManager().buildCacheMapForChat(c);
+  //   }
+  // }
+
   /// The handler used to handle all methods sent from native code to the dart vm
   ///
   /// @param [call] is the actual [MethodCall] sent from native code. It has data such as the method name and the arguments.
@@ -107,6 +157,7 @@ class MethodChannelInterface {
         Logger.info("Received new message from FCM");
         // Retreive the data for this message as a json
         Map<String, dynamic>? data = jsonDecode(call.arguments);
+        // loadChatContacts(data: data);
 
         // send data to the UI thread if it is active, otherwise handle in the isolate
         final SendPort? send = IsolateNameServer.lookupPortByName('bg_isolate');
@@ -124,6 +175,7 @@ class MethodChannelInterface {
       case "updated-message":
         // Retreive the data for this message as a json
         Map<String, dynamic>? data = jsonDecode(call.arguments);
+        // loadChatContacts(data: data);
 
         // send data to the UI thread if it is active, otherwise handle in the isolate
         final SendPort? send = IsolateNameServer.lookupPortByName('bg_isolate');
@@ -137,6 +189,8 @@ class MethodChannelInterface {
 
         return Future.value("");
       case "ChatOpen":
+        // loadChatContacts(data: call.arguments);
+
         recentIntent = call.arguments["guid"];
         Logger.info("Opening Chat with GUID: ${call.arguments['guid']}, bubble: ${call.arguments['bubble']}");
         LifeCycleManager().isBubble = call.arguments['bubble'] == "true";
@@ -155,8 +209,10 @@ class MethodChannelInterface {
 
           return Future.value("");
         }
+
         // Find the chat to reply to
         Chat? chat = Chat.findOne(guid: call.arguments["chat"]);
+        // loadChatContacts(chat: chat);
 
         // If no chat is found, then we can't do anything
         if (chat == null) {
@@ -176,6 +232,7 @@ class MethodChannelInterface {
       case "markAsRead":
         // Find the chat to mark as read
         Chat? chat = Chat.findOne(guid: call.arguments["chat"]);
+        // loadChatContacts(chat: chat);
 
         // If no chat is found, then we can't do anything
         if (chat == null) {
@@ -228,6 +285,8 @@ class MethodChannelInterface {
             chats.sort(Chat.sort);
             Chat chat = chats.first!;
 
+            // loadChatContacts(chat: chat);
+
             // Open the chat
             openChat(chat.guid, existingAttachments: attachments);
 
@@ -267,6 +326,8 @@ class MethodChannelInterface {
             // Get the most recent of our results
             chats.sort(Chat.sort);
             Chat chat = chats.first!;
+
+            // loadChatContacts(chat: chat);
 
             // Open the chat
             openChat(chat.guid, existingText: text);

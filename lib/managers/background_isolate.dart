@@ -131,9 +131,10 @@ callbackHandler() async {
       }
     }
   }
+
   await SettingsManager().init();
   await SettingsManager().getSavedSettings(headless: true);
-  if (!ContactManager().hasFetchedContacts) await ContactManager().loadContacts(headless: true);
+  if (!ContactManager().hasFetchedContacts) await ContactManager().loadContacts(headless: true, buildCache: false);
   MethodChannelInterface().init(customChannel: _backgroundChannel);
   await SocketManager().refreshConnection(connectToSocket: false);
   Get.put(AttachmentDownloadService());
