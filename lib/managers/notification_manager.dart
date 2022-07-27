@@ -244,7 +244,7 @@ class NotificationManager {
       List<Handle>? participants) async {
     if (kIsWeb && uh.Notification.permission == "granted") {
       Uint8List avatar = await avatarAsBytes(
-          isGroup: chatIsGroup, handle: handle, participants: participants, chatGuid: chatGuid, quality: 256);
+          isGroup: chatIsGroup, participants: participants, chatGuid: chatGuid, quality: 256);
       var notif = uh.Notification(chatTitle, body: messageText, icon: "data:image/png;base64,${base64Encode(avatar)}");
       notif.onClick.listen((event) {
         MethodChannelInterface().openChat(chatGuid);
@@ -276,8 +276,6 @@ class NotificationManager {
         notifications[chatGuid] ??= [];
         notificationCounts[chatGuid] = (notificationCounts[chatGuid] ?? 0) + 1;
 
-        List<LocalNotification> _notifications = List.from(notifications[chatGuid]!);
-
         Iterable<String> chats = notifications.keys;
 
         if (chats.length > maxChatCount) {
@@ -306,6 +304,8 @@ class NotificationManager {
             notifications = {};
             notificationCounts = {};
             await WindowManager.instance.focus();
+
+            allToast = null;
           };
 
           allToast!.onClickAction = (index) async {
@@ -313,6 +313,8 @@ class NotificationManager {
             notificationCounts = {};
 
             await ChatBloc().markAllAsRead();
+
+            allToast = null;
           };
 
           allToast!.onClose = (reason) {
@@ -320,6 +322,8 @@ class NotificationManager {
               notifications = {};
               notificationCounts = {};
             }
+
+            allToast = null;
           };
 
           await allToast!.show();
@@ -327,13 +331,21 @@ class NotificationManager {
           return;
         }
 
+        if (allToast != null) return;
+
         Uint8List avatar = await avatarAsBytes(
-            isGroup: chatIsGroup, handle: handle, participants: participants, chatGuid: chatGuid, quality: 256);
+            isGroup: chatIsGroup, participants: participants, chatGuid: chatGuid, quality: 256);
 
         // Create a temp file with the avatar
-        String path = join((await getApplicationSupportDirectory()).path, "temp", "${randomString(8)}.png");
-        File(path).createSync(recursive: true);
-        File(path).writeAsBytesSync(avatar);
+        String path = join((await getApplicationSupportDirectory()).path, "temp", "$chatGuid-${(participants?.map((h) => h.address).join("") ?? randomString(8)).hashCode}.png");
+        File file = File(path);
+
+        if (!await file.exists()) {
+          await file.create(recursive: true);
+          await file.writeAsBytes(avatar);
+        } else if (!(await file.readAsBytes()).equals(avatar)) {
+          await file.writeAsBytes(avatar);
+        }
 
         if (notificationCounts[chatGuid]! <= maxMessageCount) {
           toast = LocalNotification(
@@ -363,7 +375,7 @@ class NotificationManager {
           };
 
           toast.onClickAction = (index) async {
-            notifications[chatGuid]!.remove(toast);
+            notifications[chatGuid]?.remove(toast);
             notificationCounts[chatGuid] = 0;
 
             Chat? chat = Chat.findOne(guid: chatGuid);
@@ -375,26 +387,20 @@ class NotificationManager {
               Message? message = Message.findOne(guid: messageGuid);
               await ActionHandler.sendReaction(chat, message, ReactionTypes.emojiToReaction[actions[index]]!);
             }
-
-            if (await File(path).exists()) {
-              await File(path).delete();
-            }
           };
 
           toast.onClose = (reason) async {
-            notifications[chatGuid]!.remove(toast);
+            notifications[chatGuid]?.remove(toast);
             if (reason != LocalNotificationCloseReason.unknown) {
               notificationCounts[chatGuid] = 0;
-            }
-            if (await File(path).exists()) {
-              await File(path).delete();
             }
           };
         } else {
           String body = "${notificationCounts[chatGuid]!} messages";
           bool toasted = false;
+          List<LocalNotification> _notifications = List.from(notifications[chatGuid]!);
           for (LocalNotification _toast in _notifications) {
-            if (_toast.body != body) {
+            if (_toast.body != body || toasted) {
               await _toast.close();
             } else {
               toasted = true;
@@ -412,7 +418,7 @@ class NotificationManager {
           notifications[chatGuid]!.add(toast);
 
           toast.onClick = () async {
-            notifications[chatGuid]!.remove(toast);
+            notifications[chatGuid]?.remove(toast);
             notificationCounts[chatGuid] = 0;
 
             // Show window and open the right chat
@@ -428,14 +434,10 @@ class NotificationManager {
                 (route) => route.isFirst,
               );
             }
-
-            if (await File(path).exists()) {
-            await File(path).delete();
-            }
           };
 
           toast.onClickAction = (index) async {
-            notifications[chatGuid]!.remove(toast);
+            notifications[chatGuid]?.remove(toast);
             notificationCounts[chatGuid] = 0;
 
             Chat? chat = Chat.findOne(guid: chatGuid);
@@ -445,24 +447,21 @@ class NotificationManager {
             EventDispatcher().emit('refresh', null);
 
             await WindowManager.instance.focus();
-
-            if (await File(path).exists()) {
-              await File(path).delete();
-            }
           };
 
           toast.onClose = (reason) async {
-            notifications[chatGuid]!.remove(toast);
+            notifications[chatGuid]?.remove(toast);
             if (reason != LocalNotificationCloseReason.unknown) {
               notificationCounts[chatGuid] = 0;
-            }
-            if (await File(path).exists()) {
-              await File(path).delete();
             }
           };
         }
 
-        await toast.show();
+        if (allToast == null) {
+          await toast.show();
+        } else {
+          await toast.destroy();
+        }
       } else {
         QuickNotify.notify(title: chatIsGroup ? "$chatTitle: $contactName" : chatTitle, content: messageText);
       }
