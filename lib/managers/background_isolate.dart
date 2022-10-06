@@ -40,6 +40,7 @@ callbackHandler() async {
   debugPrint("(ISOLATE) Starting up...");
   MethodChannel _backgroundChannel = MethodChannel("com.bluebubbles.messaging");
   WidgetsFlutterBinding.ensureInitialized();
+  MethodChannelInterface().init(customChannel: _backgroundChannel);
   // due to a flutter change we need to manually register plugins
   // should be removeable in flutter 2.11
   if (Platform.isAndroid) {
@@ -148,7 +149,7 @@ callbackHandler() async {
   await SettingsManager().init();
   await SettingsManager().getSavedSettings(headless: true);
   if (!ContactManager().hasFetchedContacts) await ContactManager().loadContacts(headless: true);
-  MethodChannelInterface().init(customChannel: _backgroundChannel);
+  storeInitialized.complete();
   await fdb.fetchNewUrl(connectToSocket: false);
   Get.put(AttachmentDownloadService());
 }

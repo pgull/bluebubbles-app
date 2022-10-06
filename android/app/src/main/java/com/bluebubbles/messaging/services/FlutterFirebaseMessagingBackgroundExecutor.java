@@ -64,8 +64,6 @@ public class FlutterFirebaseMessagingBackgroundExecutor implements MethodCallHan
     private static final String TAG = "FLTFireBGExecutor";
 
     private final AtomicBoolean isCallbackDispatcherReady = new AtomicBoolean(false);
-    private LocalDate engineStart;
-    private boolean isTryingAgain = false;
     /**
      * The {@link MethodChannel} that connects the Android side of this plugin with the background
      * Dart isolate that was created by this plugin.
@@ -217,18 +215,9 @@ public class FlutterFirebaseMessagingBackgroundExecutor implements MethodCallHan
      * </ul>
      */
     public void startBackgroundIsolate(long callbackHandle, FlutterShellArgs shellArgs) {
-        if (backgroundFlutterEngine != null && !isNotRunning()) {
+        if (backgroundFlutterEngine != null) {
             Log.e(TAG, "Background isolate already started.");
             return;
-        } else if (backgroundFlutterEngine != null && isNotRunning()) {
-            if (ChronoUnit.SECONDS.between(engineStart, LocalDate.now()) > 2 && !isTryingAgain) {
-                backgroundFlutterEngine = null;
-                isTryingAgain = true;
-                Log.i(TAG, "Background isolate took too long to start, trying again...");
-            } else {
-                Log.i(TAG, "Background isolate in process of starting up.");
-                return;
-            }
         }
 
         Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -267,8 +256,6 @@ public class FlutterFirebaseMessagingBackgroundExecutor implements MethodCallHan
                                             new DartCallback(assets, appBundlePath, flutterCallback);
 
                                     executor.executeDartCallback(dartCallback);
-                                    engineStart = LocalDate.now();
-                                    isTryingAgain = false;
                                 }
                             });
                 };

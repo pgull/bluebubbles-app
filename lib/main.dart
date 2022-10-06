@@ -115,6 +115,7 @@ final RxnInt totalSize = RxnInt();
 late final CorePalette? monetPalette;
 Color? windowsAccentColor;
 late final Database db;
+final Completer<void> storeInitialized = Completer<void>();
 
 String? _recentIntent;
 
@@ -217,12 +218,14 @@ Future<Null> initApp(bool isBubble) async {
           Logger.info("Trying to attach to an existing ObjectBox store");
           try {
             store = Store.attach(getObjectBoxModel(), join(documentsDirectory.path, 'objectbox'));
+            storeInitialized.complete();
           } catch (e, s) {
             Logger.error(e);
             Logger.error(s);
             Logger.info("Failed to attach to existing store, opening from path");
             try {
               store = await openStore(directory: join(documentsDirectory.path, 'objectbox'));
+              storeInitialized.complete();
             } catch (e, s) {
               Logger.error(e);
               Logger.error(s);
@@ -236,6 +239,7 @@ Future<Null> initApp(bool isBubble) async {
           }
           Logger.info("Opening ObjectBox store from custom path: ${join(customStorePath, 'objectbox')}");
           store = await openStore(directory: join(customStorePath, "objectbox"));
+          storeInitialized.complete();
         } else {
           try {
             if (kIsDesktop) {
@@ -243,6 +247,7 @@ Future<Null> initApp(bool isBubble) async {
             }
             Logger.info("Opening ObjectBox store from path: ${join(documentsDirectory.path, 'objectbox')}");
             store = await openStore(directory: join(documentsDirectory.path, 'objectbox'));
+            storeInitialized.complete();
           } catch (e, s) {
             Logger.error(e);
             Logger.error(s);
@@ -254,6 +259,7 @@ Future<Null> initApp(bool isBubble) async {
               await objectBoxDirectory.create(recursive: true);
               Logger.info("Opening ObjectBox store from custom path: ${objectBoxDirectory.path}");
               store = await openStore(directory: join(customStorePath, 'objectbox'));
+              storeInitialized.complete();
             }
             // TODO Linux fallback
           }

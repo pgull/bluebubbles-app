@@ -91,6 +91,7 @@ class MethodChannelInterface {
     // call.method is the name of the call from native code
     switch (call.method) {
       case "new-server":
+        await storeInitialized.future;
         if (!SettingsManager().settings.finishedSetup.value) return Future.value("");
 
         // The arguments for a new server are formatted with the new server address inside square brackets
@@ -108,7 +109,7 @@ class MethodChannelInterface {
         Logger.info("Received new message from FCM");
         // Retreive the data for this message as a json
         Map<String, dynamic>? data = jsonDecode(call.arguments);
-
+        await storeInitialized.future;
         // send data to the UI thread if it is active, otherwise handle in the isolate
         final SendPort? send = IsolateNameServer.lookupPortByName('bg_isolate');
         if (send != null) {
@@ -127,6 +128,7 @@ class MethodChannelInterface {
         Map<String, dynamic>? data = jsonDecode(call.arguments);
 
         if (data == null) return Future.value("");
+        await storeInitialized.future;
         // send data to the UI thread if it is active, otherwise handle in the isolate
         final SendPort? send = IsolateNameServer.lookupPortByName('bg_isolate');
         if (send != null) {
@@ -141,6 +143,7 @@ class MethodChannelInterface {
       case "ChatOpen":
         recentIntent = call.arguments["guid"];
         Logger.info("Opening Chat with GUID: ${call.arguments['guid']}, bubble: ${call.arguments['bubble']}");
+        await storeInitialized.future;
         LifeCycleManager().isBubble = call.arguments['bubble'] == "true";
         await openChat(call.arguments['guid']);
         recentIntent = null;
@@ -157,6 +160,7 @@ class MethodChannelInterface {
 
           return Future.value("");
         }
+        await storeInitialized.future;
         // Find the chat to reply to
         Chat? chat = Chat.findOne(guid: call.arguments["chat"]);
 
@@ -176,6 +180,7 @@ class MethodChannelInterface {
 
         return Future.value("");
       case "markAsRead":
+        await storeInitialized.future;
         // Find the chat to mark as read
         Chat? chat = Chat.findOne(guid: call.arguments["chat"]);
 
@@ -199,6 +204,7 @@ class MethodChannelInterface {
 
         return Future.value("");
       case "chat-read-status-changed":
+        await storeInitialized.future;
         await ActionHandler.handleChatStatusChange(call.arguments["chatGuid"], !call.arguments["read"]);
 
         // In case this method is called when the app is in a background isolate
