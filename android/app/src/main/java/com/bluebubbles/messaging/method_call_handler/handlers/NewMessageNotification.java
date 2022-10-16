@@ -1,5 +1,6 @@
 package com.bluebubbles.messaging.method_call_handler.handlers;
 
+import android.provider.Settings;
 import android.util.Log;
 import android.annotation.SuppressLint;
 import android.app.Notification;
@@ -299,6 +300,10 @@ public class NewMessageNotification implements Handler {
         if (soundPath != "default") {
             int soundResourceId = context.getResources().getIdentifier(soundPath, "raw", context.getPackageName());
             notificationBuilder.setSound(Uri.parse("android.resource://" + context.getPackageName() + "/" + soundResourceId));
+        } else {
+            notificationBuilder.setSound(
+                Settings.System.DEFAULT_NOTIFICATION_URI
+            );
         }
 
         // Disable the alert if it's from you

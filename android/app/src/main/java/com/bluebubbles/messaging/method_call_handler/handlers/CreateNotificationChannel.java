@@ -6,6 +6,7 @@ import android.content.Context;
 import android.media.AudioAttributes;
 import android.os.Build;
 import android.net.Uri;
+import android.provider.Settings;
 import android.util.Log;
 
 import io.flutter.plugin.common.MethodCall;
@@ -48,6 +49,11 @@ public class CreateNotificationChannel implements Handler{
                         .build();
                 int soundResourceId = context.getResources().getIdentifier(soundPath, "raw", context.getPackageName());
                 channel.setSound(Uri.parse("android.resource://" + context.getPackageName() + "/" + soundResourceId), audioAttributes);
+            } else {
+                channel.setSound(
+                    Settings.System.DEFAULT_NOTIFICATION_URI,
+                    new AudioAttributes.Builder().setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).setUsage(AudioAttributes.USAGE_NOTIFICATION).build()
+                );
             }
             NotificationManager notificationManager = context.getSystemService(NotificationManager.class);
             notificationManager.createNotificationChannel(channel);
